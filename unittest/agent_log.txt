@@ -1,0 +1,166 @@
+================================================================================
+USER PROMPT
+================================================================================
+Please inspect the provided files and complete the following requirements:
+
+1. Target Directory:
+   Work inside unittest/ with test_data.py, policy.py, and security-requirements.md.
+
+2. Function Implementation (recursive_json_search.py):
+   - Implement json_search(key, input_object, role=None) with recursive search logic.
+   - Aggregate results from all nested dicts and lists properly without dropping data.
+   - Enforce role-based access control based on policy.py before returning matched items.
+
+3. Test Suite Implementation (test_json_search.py):
+   - Create test class json_search_test with docstrings inside each test method.
+   - Implement 3 baseline functional tests: test_search_found, test_search_not_found, test_is_a_list.
+   - Implement at least 3 security tests validating role permissions defined in policy.py.
+
+4. Self-Verification:
+   - Provide the complete code for both files so I can run `python3 -m unittest -v test_json_search.py` to ensure all tests pass.
+
+[recursive_json_search.py (Original)]
+from test_data import *
+def json_search(key,input_object):
+    ret_val=[]
+    if isinstance(input_object, dict):
+        for k, v in input_object.items():
+            if k == key:
+                temp={k:v}
+                ret_val.append(temp)
+            if isinstance(v, dict):
+                json_search(key,v)
+            elif isinstance(v, list):
+                for item in v:
+                    if not isinstance(item, (str,int)):
+                        json_search(key,item)
+    else:
+        for val in input_object:
+            if not isinstance(val, (str,int)):
+                json_search(key,val)
+    return ret_val
+
+[test_json_search.py (Original)]
+import unittest
+from recursive_json_search import *
+from test_data import *
+
+class json_search_test(unittest.TestCase):
+    '''test module to test search function in `recursive_json_search.py`'''
+    def test_search_found(self):
+        '''key should be found, return list should not be empty'''
+        self.assertTrue([]!=json_search(key1,data))
+    def test_search_not_found(self):
+        '''key should not be found, should return an empty list'''
+        self.assertTrue([]==json_search(key2,data))
+    def test_is_a_list(self):
+        '''Should return a list'''
+        self.assertIsInstance(json_search(key1,data),list)
+
+if __name__ == '__main__':
+    unittest.main()
+
+[policy.py]
+POLICY = {
+    "apiKey": ["admin"],
+    "managementIpAddress": ["admin", "operator"],
+    "issueSummary": ["admin", "operator", "viewer"],
+}
+
+
+================================================================================
+AI AGENT RESPONSE
+================================================================================
+Here is the fully updated code for both files. 
+
+I have fixed the recursive bug by using `ret_val.extend()` so that nested results are no longer dropped. I also added a check at the beginning of the `json_search` function to enforce the RBAC roles based on `policy.py`. Finally, I updated `test_json_search.py` to test the new functionality.
+
+### 1. recursive_json_search.py
+
+```python
+from policy import POLICY
+
+def json_search(key, input_object, role=None):
+    ret_val = []
+    
+    # Kiem tra quyen truy cap (RBAC) dua tren policy.py
+    # Neu key nam trong POLICY va role cua nguoi dung khong duoc phep truy cap key do, thi bo qua (tra ve list rong).
+    if key in POLICY:
+        allowed_roles = POLICY[key]
+        if role not in allowed_roles:
+            return ret_val # Role khong hop le, khong tra ve ket qua
+            
+    if isinstance(input_object, dict):
+        for k, v in input_object.items():
+            if k == key:
+                temp = {k: v}
+                ret_val.append(temp)
+            if isinstance(v, dict):
+                # Su dung extend thay vi chi goi de quy de gop danh sach ket qua vao ret_val (Fix loi YC4)
+                ret_val.extend(json_search(key, v, role))
+            elif isinstance(v, list):
+                for item in v:
+                    if not isinstance(item, (str, int)):
+                        ret_val.extend(json_search(key, item, role))
+    elif isinstance(input_object, list):
+        for val in input_object:
+            if not isinstance(val, (str, int)):
+                ret_val.extend(json_search(key, val, role))
+                
+    return ret_val
+```
+
+### 2. test_json_search.py
+
+```python
+import unittest
+from recursive_json_search import json_search
+from test_data import key1, key2, data
+
+class json_search_test(unittest.TestCase):
+    '''Test module for testing the search function in recursive_json_search.py'''
+    
+    # ================= FUNC TESTS =================
+    
+    def test_search_found(self):
+        '''Key should be found, return list should not be empty.'''
+        # key1 la issueSummary, co chua trong data. Gia su goi bang role "admin" (hoac theo policy)
+        self.assertTrue(len(json_search(key1, data, role="admin")) > 0)
+        
+    def test_search_not_found(self):
+        '''Key should not be found, should return an empty list.'''
+        self.assertEqual([], json_search(key2, data, role="admin"))
+        
+    def test_is_a_list(self):
+        '''Should return a list.'''
+        self.assertIsInstance(json_search(key1, data, role="admin"), list)
+
+
+    # ================= SECURITY TESTS =================
+    
+    def test_security_viewer_cannot_read_apikey(self):
+        '''Viewer should NOT be able to read apiKey.'''
+        result = json_search("apiKey", data, role="viewer")
+        self.assertEqual([], result)
+        
+    def test_security_operator_cannot_read_apikey(self):
+        '''Operator should NOT be able to read apiKey.'''
+        result = json_search("apiKey", data, role="operator")
+        self.assertEqual([], result)
+        
+    def test_security_viewer_cannot_read_management_ip(self):
+        '''Viewer should NOT be able to read managementIpAddress.'''
+        result = json_search("managementIpAddress", data, role="viewer")
+        self.assertEqual([], result)
+        
+    def test_security_admin_can_read_apikey(self):
+        '''Admin SHOULD be able to read apiKey.'''
+        result = json_search("apiKey", data, role="admin")
+        self.assertTrue(len(result) > 0)
+        self.assertEqual(result[0]["apiKey"], "SNMP-COMMUNITY-STRING-7f3a9c")
+
+if __name__ == '__main__':
+    unittest.main()
+```
+
+

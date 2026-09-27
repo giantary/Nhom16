@@ -5,19 +5,18 @@ from policy import POLICY
 def json_search(key, input_object, role=None):
     """
     Tìm kiếm đệ quy key trong đối tượng JSON (dict/list lồng nhau)
-    và áp dụng kiểm soát truy cập theo vai trò (RBAC).
+    và áp dụng kiểm soát truy cập dựa trên vai trò (RBAC).
     """
-    # 1. Kiểm tra phân quyền RBAC dựa trên policy
-    if key in POLICY:
-        if role is not None and role not in POLICY[key]:
+
+    if key in POLICY and role is not None:
+        if role not in POLICY[key]:
             return []
 
     ret_val = []
 
-    # 2. Xử lý trường hợp input_object là dictionary
+    # Xử lý trường hợp input_object là dictionary
     if isinstance(input_object, dict):
         for k, v in input_object.items():
-            # Nếu tìm thấy key khớp -> Thêm vào kết quả
             if k == key:
                 temp = {k: v}
                 ret_val.append(temp)
@@ -30,7 +29,7 @@ def json_search(key, input_object, role=None):
                     if not isinstance(item, (str, int)):
                         ret_val.extend(json_search(key, item, role))
 
-    # 3. Xử lý trường hợp input_object là list
+    # Xử lý trường hợp input_object là list
     elif isinstance(input_object, list):
         for val in input_object:
             if not isinstance(val, (str, int)):
@@ -40,8 +39,9 @@ def json_search(key, input_object, role=None):
 
 
 if __name__ == "__main__":
-    print("--- Test với role 'viewer' cho key 'issueSummary' ---")
-    print(json_search("issueSummary", data, role="viewer"))
-
-    print("\n--- Test với role 'viewer' cho key 'apiKey' (Không có quyền) ---")
+    print("--- Test với key 'issueSummary' ---")
+    print(json_search("issueSummary", data))
+    print("\n--- Test với key 'apiKey' và role 'viewer' (Cấm truy cập) ---")
     print(json_search("apiKey", data, role="viewer"))
+    print("\n--- Test với key 'apiKey' và role 'admin' (Cho phép) ---")
+    print(json_search("apiKey", data, role="admin"))
